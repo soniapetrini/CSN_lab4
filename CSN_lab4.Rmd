@@ -282,23 +282,18 @@ paste("s:",s,"- AIC:", AIC)
 Same regression as before
 
 ```{r}
-linear_model = lm(log(degree_2nd_moment)~vertices, Catalan)
-a_linreg = exp(coef(linear_model)[1])
-c_linreg = coef(linear_model)[2]
+linear_model_3 = lm(log(Mean_k2m)~vertices, grouped_Catalan)
+a_linreg_3 = exp(coef(linear_model_3)[1])
+c_linreg_3 = coef(linear_model_3)[2]
 
-model_3 = nls(degree_2nd_moment~a*exp(c*vertices), data=Catalan, start = list(a = a_linreg, c = c_linreg))
-coef(model_3)[1]
-coef(model_3)[2]
-
-#f(n) = an^b
-nonlinear_model = nls(Mean_k2m~a*(vertices)^b, data=grouped_Catalan, start = list(a = a_linreg, b = b_linreg))
-coef(nonlinear_model)["a"]
-coef(nonlinear_model)["b"]
+model_3 = nls(Mean_k2m~a*exp(c*vertices), data=grouped_Catalan, start = list(a = a_linreg_3, c = c_linreg_3))
+coef(model_3)["a"]
+coef(model_3)["c"]
 
 # RSS
-RSS <- deviance(nonlinear_model)
-AIC <- AIC(nonlinear_model)
-s <- sqrt(deviance(nonlinear_model)/df.residual(nonlinear_model))
+RSS <- deviance(model_3)
+AIC <- AIC(model_3)
+s <- sqrt(deviance(model_3)/df.residual(model_3))
 paste("s:",s,"- AIC:", AIC)
 ```
 
