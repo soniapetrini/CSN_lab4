@@ -1,0 +1,205 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(summarytools)
+```
+
+## Load data
+
+```{r}
+languages <- c("Arabic", "Basque", "Catalan", "Chinese", "Czech", "English", "Greek", "Hungarian", "Italian", "Turkish")
+
+table_1 <- data.frame(language=languages,
+                     N = numeric(length(languages)),
+                     mu_n = numeric(length(languages)),
+                     sd_n = numeric(length(languages)),
+                     mu_k = numeric(length(languages)),
+                     sd_k = numeric(length(languages)))
+
+for (l in 1:length(languages)) {
+  lang <- languages[l]
+  path <- paste("./data/",paste(lang,"_dependency_tree_metrics.txt",sep = ""),sep = "")
+  raw_data <- read.table(path,header = FALSE,sep = " ",fill = TRUE,quote="", comment.char="") 
+  colnames(raw_data) = c("vertices","degree_2nd_moment", "mean_length")
+  raw_data = raw_data[order(raw_data$vertices),]
+  # check validity
+  valid_data <- raw_data %>% mutate(check = case_when(        
+                                          (degree_2nd_moment >= (4-6)/vertices & degree_2nd_moment <= vertices-1) ~ "valid",
+                                          TRUE ~ "invalid")) %>% filter(check == "valid")
+  
+  invalids = nrow(raw_data)-nrow(valid_data)
+  print(paste("Invalid values for",lang,":",invalids))
+  
+  table_1$N[l] <- nrow(valid_data)
+  table_1$mu_n[l] <- mean(valid_data$vertices)
+  table_1$sd_n[l] <- sd(valid_data$vertices)
+  table_1$mu_k[l] <- mean(valid_data$degree_2nd_moment)
+  table_1$sd_k[l] <- sd(valid_data$degree_2nd_moment)
+}
+```
+
+
+```{r}
+Catalan = read.table("./data/Catalan_dependency_tree_metrics.txt", header = FALSE)
+colnames(Catalan) = c("vertices","degree_2nd_moment", "mean_length")
+Catalan = Catalan[order(Catalan$vertices),]
+```
+
+
+
+# preliminary plots
+
+```{r}
+plot(Catalan$vertices, Catalan$degree_2nd_moment,
+       xlab = "vertices", ylab = "degree_2nd_moment")
+```
+
+
+```{r}
+plot(log(Catalan$vertices), log(Catalan$degree_2nd_moment),
+       xlab = "log(vertices)", ylab = "log(degree_2nd_moment)")
+```
+
+
+```{r}
+mean_Catalan = aggregate(Catalan, list(Catalan$vertices), mean)
+par(mfrow=c(1,2))
+
+plot(mean_Catalan$vertices, mean_Catalan$degree_2nd_moment,
+       xlab = "vertices", ylab = "mean mean degree_2nd_moment")
+plot(log(mean_Catalan$vertices), log(mean_Catalan$degree_2nd_moment),
+       xlab = "log(vertices)", ylab = "log(mean mean degree_2nd_moment)")
+
+```
+
+### attempt initial scaling
+```{r}
+plot(Catalan$vertices, Catalan$degree_2nd_moment,
+     xlab = "vertices", ylab = "degree 2nd moment")
+lines(mean_Catalan$vertices,mean_Catalan$degree_2nd_moment, col = "green")
+lines(Catalan$vertices,
+     (1 - 1/Catalan$vertices)*(5 - 6/Catalan$vertices), col = "red")
+lines(Catalan$vertices,4-6/Catalan$vertices, col = "blue")
+lines(Catalan$vertices,Catalan$vertices-1, col = "blue")
+```
+
+
+
+# Non-linear regression
+
+## MODEL 1
+
+```{r}
+#a_initial = 4
+b_initial = 4
+start1 <- Sys.time()
+nonlinear_model = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_initial))
+end1 <- Sys.time()
+coef(nonlinear_model)[1]
+end1-start1
+```
+
+### initial params with linear reg
+
+```{r}
+# log ⟨d⟩ = b log n + a′,
+linear_model = lm(log(degree_2nd_moment)~log(vertices), Catalan)
+a_linreg = exp(coef(linear_model)[1])
+b_linreg = coef(linear_model)[2]
+paste('a_linreg:',a_linreg,'b_linreg:',b_linreg, sep = ' ')
+```
+
+```{r}
+b_initial = coef(linear_model)[1]
+start1 <- Sys.time()
+nonlinear_model = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_initial))
+end1 <- Sys.time()
+coef(nonlinear_model)[1]
+end1-start1
+```
+
+
+### Homoskedasticity
+
+```{r}
+resid = resid(nonlinear_model)
+fitted = fitted(nonlinear_model)
+plot(fitted,resid)
+```
+
+
+## MODEL 2 - power law
+
+```{r}
+#f(n) = an^b
+
+a_initial = 4
+b_initial = 4
+start1 <- Sys.time()
+nonlinear_model = nls(degree_2nd_moment~a*(vertices)^b, data=Catalan, start = list(a = a_linreg, b = b_linreg))
+end1 <- Sys.time()
+coef(nonlinear_model)[1]
+coef(nonlinear_model)[2]
+end1-start1
+
+```
+
+
+```{r}
+plot(nonlinear_model)
+```
+
+### BOX COX transformation
+
+```{r}
+library(caret)
+k2m_BCOX <- caret::BoxCoxTrans(Catalan$degree_2nd_moment)
+#print(k2m_BCOX)
+Catalan <- cbind(Catalan, k2m_new=predict(k2m_BCOX, Catalan$degree_2nd_moment)) # append the transformed variable to cars
+par(mfrow=c(1,2))
+hist(Catalan$k2m_new)
+hist(Catalan$degree_2nd_moment)
+```
+
+
+```{r}
+model_2_BCIX = nls(k2m_new~a*(vertices)^b, data=Catalan, start = list(a = a_linreg, b = b_linreg))
+plot(model_2_BCIX)
+```
+
+
+
+## MODEL 3 - exponential
+#!! not working yet
+
+```{r}
+linear_model = lm(log(degree_2nd_moment)~vertices, Catalan)
+a_linreg = exp(coef(linear_model)[1])
+c_linreg = coef(linear_model)[2]
+paste('a_linreg:',a_linreg,'c_linreg:',c_linreg, sep = ' ')
+```
+
+
+```{r}
+library(seewave)
+#f(n) = ae^(cn)
+
+start1 <- Sys.time()
+a_ini = 10
+c_ini = 2
+
+nonlinear_model = nls(degree_2nd_moment~a*exp(c*vertices), data=Catalan, start = list(a = a_linreg, c = c_linreg))w
+end1 <- Sys.time()
+coef(nonlinear_model)[1]
+coef(nonlinear_model)[2]
+end1-start1
+```
+
+
+
+
+
