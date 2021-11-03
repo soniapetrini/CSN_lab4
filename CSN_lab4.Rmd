@@ -123,21 +123,16 @@ coef(nonlinear_model)[1]
 end1-start1
 ```
 
-
-### Homoskedasticity
-
 ```{r}
-resid = resid(nonlinear_model)
-fitted = fitted(nonlinear_model)
-plot(fitted,resid)
+plot(nonlinear_model)
 ```
+
 
 
 ## MODEL 2 - power law
 
 ```{r}
 #f(n) = an^b
-
 a_initial = 4
 b_initial = 4
 start1 <- Sys.time()
@@ -146,7 +141,6 @@ end1 <- Sys.time()
 coef(nonlinear_model)[1]
 coef(nonlinear_model)[2]
 end1-start1
-
 ```
 
 
@@ -180,23 +174,126 @@ linear_model = lm(log(degree_2nd_moment)~vertices, Catalan)
 a_linreg = exp(coef(linear_model)[1])
 c_linreg = coef(linear_model)[2]
 paste('a_linreg:',a_linreg,'c_linreg:',c_linreg, sep = ' ')
+
+plot(linear_model)
 ```
 
 
 ```{r}
-library(seewave)
 #f(n) = ae^(cn)
-
 start1 <- Sys.time()
 a_ini = 10
 c_ini = 2
 
-nonlinear_model = nls(degree_2nd_moment~a*exp(c*vertices), data=Catalan, start = list(a = a_linreg, c = c_linreg))
+model_3 = nls(degree_2nd_moment~a*exp(c*vertices), data=Catalan, start = list(a = a_linreg, c = c_linreg))
 end1 <- Sys.time()
-coef(nonlinear_model)[1]
-coef(nonlinear_model)[2]
+coef(model_3)[1]
+coef(model_3)[2]
 end1-start1
 ```
+
+
+
+# AGGREGATED DATA
+
+```{r}
+grouped_Catalan <- Catalan %>% group_by(vertices) %>% dplyr::summarize(Mean_k2m = mean(degree_2nd_moment, na.rm=TRUE))
+```
+
+
+## Model 0 
+
+```{r}
+n <- length(grouped_Catalan$vertices)
+RSS <- sum((grouped_Catalan$Mean_k2m - (1-1/n)*(5-6/n)))
+p <- 0
+s <- sqrt(RSS/(n - p))
+AIC <- n*log(2*pi) + n*log(RSS/n) + n + 2*(p + 1)
+
+paste("s:",s,"- AIC:", AIC)
+
+```
+
+
+
+
+## Model 1
+
+```{r}
+linear_model = lm(log(Mean_k2m)~log(vertices), grouped_Catalan)
+a_linreg = exp(coef(linear_model)[1])
+b_linreg = coef(linear_model)[2]
+
+# reg
+nonlinear_model = nls(Mean_k2m~(vertices/2)^b, data= grouped_Catalan, start = list(b = b_linreg))
+coef(nonlinear_model)["b"]
+
+# RSS
+RSS <- deviance(nonlinear_model)
+AIC <- AIC(nonlinear_model)
+paste("RSS:",RSS,"- AIC:", AIC)
+```
+
+```{r}
+plot(nonlinear_model)
+```
+
+
+# Model 2
+
+Same regression as before
+
+```{r}
+#f(n) = an^b
+nonlinear_model = nls(Mean_k2m~a*(vertices)^b, data=grouped_Catalan, start = list(a = a_linreg, b = b_linreg))
+coef(nonlinear_model)["a"]
+coef(nonlinear_model)["b"]
+
+# RSS
+RSS <- deviance(nonlinear_model)
+AIC <- AIC(nonlinear_model)
+s <- sqrt(deviance(nonlinear_model)/df.residual(nonlinear_model))
+paste("s:",s,"- AIC:", AIC)
+```
+
+
+
+# Model 3 
+
+
+```{r}
+linear_model_3 = lm(log(Mean_k2m)~vertices, grouped_Catalan)
+a_linreg_3 = exp(coef(linear_model_3)[1])
+c_linreg_3 = coef(linear_model_3)[2]
+
+model_3 = nls(Mean_k2m~a*exp(c*vertices), data=grouped_Catalan, start = list(a = a_linreg_3, c = c_linreg_3))
+coef(model_3)["a"]
+coef(model_3)["c"]
+
+# RSS
+RSS <- deviance(model_3)
+AIC <- AIC(model_3)
+s <- sqrt(deviance(model_3)/df.residual(model_3))
+paste("s:",s,"- AIC:", AIC)
+```
+
+
+# Model 1+
+
+```{r}
+d_initial <- 7
+model_1plus = nls(Mean_k2m~(vertices/2)^b + d, data= grouped_Catalan, start = list(b = b_linreg, d = d_initial))
+coef(model_1plus)["b"]
+coef(model_1plus)["d"]
+
+# RSS
+RSS <- deviance(model_1plus)
+AIC <- AIC(model_1plus)
+s <- sqrt(deviance(model_1plus)/df.residual(model_1plus))
+paste("s:",s,"- AIC:", AIC)
+```
+
+
 
 
 
