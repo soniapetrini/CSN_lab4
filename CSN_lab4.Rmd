@@ -193,25 +193,6 @@ end1-start1
 ```
 
 
-### try robust function
-
-```{r}
-library(robustbase)
-robust_3 <- nlrob(degree_2nd_moment~a*exp(c*vertices), data=Catalan, start = list(a = a_linreg, c = c_linreg))
-end1 <- Sys.time()
-coef(robust_3)[1]
-coef(robust_3)[2]
-end1-start1
-```
-
-
-```{r}
-resid = robust_3$residuals
-fitted = robust_3$fitted
-plot(fitted, resid)
-```
-
-
 
 # AGGREGATED DATA
 
@@ -244,7 +225,7 @@ a_linreg = exp(coef(linear_model)[1])
 b_linreg = coef(linear_model)[2]
 
 # reg
-nonlinear_model = nls(Mean_k2m~(vertices)^b, data= grouped_Catalan, start = list(b = b_linreg))
+nonlinear_model = nls(Mean_k2m~(vertices/2)^b, data= grouped_Catalan, start = list(b = b_linreg))
 coef(nonlinear_model)["b"]
 
 # RSS
@@ -279,7 +260,6 @@ paste("s:",s,"- AIC:", AIC)
 
 # Model 3 
 
-Same regression as before
 
 ```{r}
 linear_model_3 = lm(log(Mean_k2m)~vertices, grouped_Catalan)
@@ -298,6 +278,20 @@ paste("s:",s,"- AIC:", AIC)
 ```
 
 
+# Model 1+
+
+```{r}
+d_initial <- 7
+model_1plus = nls(Mean_k2m~(vertices/2)^b + d, data= grouped_Catalan, start = list(b = b_linreg, d = d_initial))
+coef(model_1plus)["b"]
+coef(model_1plus)["d"]
+
+# RSS
+RSS <- deviance(model_1plus)
+AIC <- AIC(model_1plus)
+s <- sqrt(deviance(model_1plus)/df.residual(model_1plus))
+paste("s:",s,"- AIC:", AIC)
+```
 
 
 
