@@ -6,6 +6,7 @@ output: html_notebook
 ```{r}
 library(dplyr)
 library(summarytools)
+library(caret)
 ```
 
 ## Load data
@@ -156,7 +157,6 @@ plot(nonlinear_model)
 ### BOX COX transformation
 
 ```{r}
-library(caret)
 k2m_BCOX <- caret::BoxCoxTrans(Catalan$degree_2nd_moment)
 #print(k2m_BCOX)
 Catalan <- cbind(Catalan, k2m_new=predict(k2m_BCOX, Catalan$degree_2nd_moment)) # append the transformed variable to cars
@@ -174,7 +174,6 @@ plot(model_2_BCIX)
 
 
 ## MODEL 3 - exponential
-#!! not working yet
 
 ```{r}
 linear_model = lm(log(degree_2nd_moment)~vertices, Catalan)
@@ -192,7 +191,7 @@ start1 <- Sys.time()
 a_ini = 10
 c_ini = 2
 
-nonlinear_model = nls(degree_2nd_moment~a*exp(c*vertices), data=Catalan, start = list(a = a_linreg, c = c_linreg))w
+nonlinear_model = nls(degree_2nd_moment~a*exp(c*vertices), data=Catalan, start = list(a = a_linreg, c = c_linreg))
 end1 <- Sys.time()
 coef(nonlinear_model)[1]
 coef(nonlinear_model)[2]
