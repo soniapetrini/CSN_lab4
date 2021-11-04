@@ -71,8 +71,8 @@ ensemble_of_models <- function(language){
   
   # MODEL 0
   ## Get AIC, standard error
+  RSS <- sum((mean_lang$degree_2nd_moment - (1-1/mean_lang$vertices)*(5-6/mean_lang$vertices))^2)
   n <- length(mean_lang$vertices)
-  RSS <- sum((mean_lang$degree_2nd_moment - (1-1/n)*(5-6/n)))
   p <- 0
   s_0 <- sqrt(RSS/(n - p))
   AIC_0 <- n*log(2*pi) + n*log(RSS/n) + n + 2*(p + 1)
@@ -91,6 +91,20 @@ ensemble_of_models <- function(language){
   AIC_1 <- AIC(nonlinear_model_1)
   b_1 <- coef(nonlinear_model_1)["b"]
   
+  # MODEL 1+
+  ## Perform nonlinear regression
+  # Here we use the previous initial b obtained with linear regression and a
+  # random starting value for d
+  d_initial <- 7
+  model_1plus = nls(degree_2nd_moment~(vertices/2)^b + d, data=mean_lang, 
+                    start = list(b = b_initial, d = d_initial))
+  ## Get AIC, RSS and obtained coefficients
+  b_1p <- coef(model_1plus)["b"]
+  d_1p <- coef(model_1plus)["d"]
+  s_1p <- sqrt(deviance(model_1plus)/df.residual(model_1plus))
+  AIC_1p <- AIC(model_1plus)
+  
+  
   # MODEL 2
   ## Obtain initial parameters with linear regression
   linear_model_2 = lm(log(degree_2nd_moment)~log(vertices), mean_lang)
@@ -107,6 +121,24 @@ ensemble_of_models <- function(language){
   AIC_2 <- AIC(nonlinear_model_2)
   a_2 <- coef(nonlinear_model_2)["a"]
   b_2 <- coef(nonlinear_model_2)["b"]
+  
+  # MODEL 2+
+  ## Perform nonlinear regression
+  # Here we use the previous initial a,b obtained with linear regression and a
+  # random starting value for d
+  d_initial <- 0
+  model_2plus = nls(degree_2nd_moment~a*(vertices)^b + d, data=mean_lang, 
+                    start = list(a = a_initial, b = b_initial, d = d_initial),
+                    control = list(maxiter=1000),
+                    algorithm = 'port',
+                    lower=c(0,0,-20),
+                    upper=c(20,5,20))
+  ## Get AIC, RSS and obtained coefficients
+  a_2p <- coef(model_2plus)["a"]
+  b_2p <- coef(model_2plus)["b"]
+  d_2p <- coef(model_2plus)["d"]
+  s_2p <- sqrt(deviance(model_2plus)/df.residual(model_2plus))
+  AIC_2p <- AIC(model_2plus)
   
   # MODEL 3
   ## Obtain initial parameters with linear regression
@@ -130,24 +162,83 @@ ensemble_of_models <- function(language){
   coefs <- c(language, 
               b_1,
               a_2, b_2,
-              a_3, c_3)
-  aics <- c(language, AIC_0, AIC_1, AIC_2, AIC_3)
+              a_3, c_3,
+              b_1p, d_1p,
+              a_2p, b_2p, d_2p)
+  aics <- c(language, AIC_0, AIC_1, AIC_2, AIC_3, AIC_1p, AIC_2p)
   
-  best_aic <- min(c(AIC_0, AIC_1, AIC_2, AIC_3))
+  best_aic <- min(c(AIC_0, AIC_1, AIC_2, AIC_3, AIC_1p, AIC_2p))
   
   aics_diff <- c(language, abs(AIC_0-best_aic),
-                 abs(AIC_1-best_aic), abs(AIC_2-best_aic), 
-                 abs(AIC_3-best_aic))
+                 abs(AIC_1-best_aic),
+                 abs(AIC_2-best_aic), 
+                 abs(AIC_3-best_aic),
+                 abs(AIC_1p-best_aic),
+                 abs(AIC_2p-best_aic))
   
-  std_error <- c(language, s_0, s_1, s_2, s_3)
+  std_error <- c(language, s_0, s_1, s_2, s_3, s_1p, s_2p)
   
   return(list("coefficients" = coefs ,"aics"=aics ,"aics_diff" = aics_diff, 
               "std_error" = std_error))
 }
 
-
+# Initialize constants
 languages <- c("Arabic", "Basque", "Catalan", "Chinese", "Czech", "English", "Greek", "Hungarian", "Italian", "Turkish")
 
+# Initialize dataframes
+coefficients_df <- data.frame(matrix(ncol = 11, nrow = 0))
+coefficients_df_names <- c('Language', '1: b', '2: a', '2: b', '3: a',
+                     '3: c', '1+: b', '1+: d', '2+: a',
+                     '2+: b', '2+: d')
+colnames(coefficients_df) <- coefficients_df_names
+
+residual_err_df <- data.frame(matrix(ncol = 7, nrow = 0))
+residual_err_df_names <- c('Language', '0', '1', '2', '3', '1+',
+                           '2+')
+colnames(residual_err_df) <- residual_err_df_names
+
+aic_df <- data.frame(matrix(ncol = 7, nrow = 0))
+aic_df_names <- c('Language', '0', '1', '2', '3', '1+',
+                           '2+')
+colnames(aic_df) <- aic_df_names
+
+aic_diff_df <- data.frame(matrix(ncol = 7, nrow = 0))
+aic_diff_df_names <- c('Language', '0', '1', '2', '3', '1+',
+                  '2+')
+colnames(aic_diff_df) <- aic_diff_df_names
+
+# Show summary
 summary_table <- langs_summary(languages)
 
-data <- ensemble_of_models("Catalan")
+# Show model fitting results
+for (language in languages){
+  lang_data <- ensemble_of_models(language)
+
+  # Add models params to df
+  language_coeffs_df = data.frame(t(unlist(lang_data$coefficients)))
+  names(language_coeffs_df) = coefficients_df_names
+  coefficients_df <- rbind(coefficients_df,language_coeffs_df)
+  
+  # Add models residual errors to df
+  lang_err_df = data.frame(t(unlist(lang_data$std_error)))
+  names(lang_err_df) = residual_err_df_names
+  residual_err_df <- rbind(residual_err_df,lang_err_df)
+  
+  # Add models AIC to df
+  lang_aic_df = data.frame(t(unlist(lang_data$aics)))
+  names(lang_aic_df) = aic_df_names
+  aic_df <- rbind(aic_df,lang_aic_df)
+  
+  # Add models AIC diff to df
+  lang_aic_diff_df = data.frame(t(unlist(lang_data$aics_diff)))
+  names(lang_aic_diff_df) = aic_diff_df_names
+  aic_diff_df <- rbind(aic_diff_df,lang_aic_diff_df)
+}
+
+coefficients_df
+
+residual_err_df
+
+aic_df
+
+aic_diff_df
