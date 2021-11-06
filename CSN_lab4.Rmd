@@ -49,7 +49,9 @@ for (l in 1:length(languages)) {
 Catalan = read.table("./data/Catalan_dependency_tree_metrics.txt", header = FALSE)
 colnames(Catalan) = c("vertices","degree_2nd_moment", "mean_length")
 Catalan = Catalan[order(Catalan$vertices),]
+
 ```
+
 
 
 ```{r}
@@ -119,6 +121,48 @@ plot(nonlinear_model)
 ```
 
 Heteroskedasticity and non normally distributed residuals!
+
+## Not assuming homoskedasticity 
+
+
+Source: https://www.r-bloggers.com/2015/06/heteroscedasticity-in-regression-it-matters/
+Code: https://github.com/matloff/misc/blob/master/NlsHC.R
+
+```{r}
+library(minpack.lm)
+library(sandwich)
+
+nlsvcovhc <- function(nlslmout) {
+  
+ # uses output of nlsLM() of the minpack.lm package to get an asymptotic 
+ # covariance matrix without assuming homoscedasticity
+  
+ b <- coef(nlslmout)
+ m <- nlslmout$m
+ resid <- m$resid()
+ hmat <- m$gradient()
+ fakex <- hmat
+ fakey <- resid + hmat %*% b
+ lmout <- lm(fakey ~ fakex - 1)
+ vcovHC(lmout)
+}
+```
+
+
+"vcov() inputs the result of a call to lm() or nls(), and outputs the estimated covariance matrix of your estimated parameter vector. Thus the standard errors of the estimated parameters are the square roots of the diagonal elements of the matrix returned by vcov()."
+
+
+```{r}
+# chech the vcov matrix with standard nls()
+nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
+print(vcov(nonlinear_model_1))
+
+# chech the vcov matrix with standard nls()
+nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
+print(nlsvcovhc(nonlinear_model_1))
+
+
+```
 
 
 ## MODEL 2 - power law
