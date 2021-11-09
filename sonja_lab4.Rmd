@@ -1,0 +1,190 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# get a language
+
+```{r}
+library(dplyr)
+library(summarytools)
+library(caret)
+library("ggpubr")
+require(investr)
+
+languages <- c("Arabic", "Basque", "Catalan", "Chinese", "Czech", "English", "Greek", "Hungarian", "Italian", "Turkish")
+
+# read a language file
+read_language <- function(lang) {
+  
+  path <- paste("./data/",paste(lang,"_dependency_tree_metrics.txt",sep = ""),sep = "")
+  raw_data <- read.table(path,header = FALSE,sep = " ",fill = TRUE,quote="", comment.char="") 
+  colnames(raw_data) = c("vertices","degree_2nd_moment", "mean_length")
+  raw_data = raw_data[order(raw_data$vertices),]
+  
+  # check validity
+  valid_data <- raw_data %>% mutate(check = case_when(        
+                                          (degree_2nd_moment >= (4-6)/vertices & degree_2nd_moment <= vertices-1) ~ "valid",
+                                          TRUE ~ "invalid")) %>% filter(check == "valid") %>% select(-check)
+  return(valid_data)
+}
+
+
+# plot data with line at mean+4*sd
+# return outlier free dataframe if remove=TRUE
+find_outliers <- function(lang,remove) {
+  data <- read_language(lang)
+  mean <- mean(data$degree_2nd_moment)
+  sd <- sd(data$degree_2nd_moment)
+  
+  plot(data$vertices, data$degree_2nd_moment, xlab = "vertices", ylab = "degree 2nd moment")
+  abline(h=mean+4*sd, col='green')
+  
+  # count
+  n_outliers <- length(which(data$degree_2nd_moment > mean+4*sd))
+  print(paste("outliers removed for",lang,":",n_outliers))
+  
+  if (remove == TRUE) {
+    # remove
+    data <- data %>% mutate(outlier = case_when(
+      degree_2nd_moment > mean+4*sd ~ "out",
+      TRUE ~ "in" )) %>% filter(outlier == "in") %>% select(-outlier)
+    
+    return(data)
+  }
+  
+}
+
+# plot model 1
+plot_model1 <- function(data,b_1) {
+  plot(data$vertices, data$degree_2nd_moment, xlab = "vertices", ylab = "degree 2nd moment")
+  lines(data$vertices, (data$vertices/2)^b_1 , col = "red")
+  lines(data$vertices,4-6/data$vertices, col = "blue")
+  lines(data$vertices,data$vertices-1, col = "blue")
+}
+
+
+# get weighted model 1
+# influencial_weight is the value from 0 to 1 to assign to observation with high influence
+
+weighted_model_1 <- function(data, influencial_weight) {
+  
+  data$weights <- ifelse(t(dfbetas)> threshold,influencial_weight,1)
+  
+  linear_model_1 = lm(log(degree_2nd_moment)~log(vertices), mean_data)
+  b_initial = coef(linear_model_1)[2]
+  
+  ## Perform nonlinear regression
+  nonlinear_model_1_weighted = nls(degree_2nd_moment~(vertices/2)^b, data = data,
+                        start = list(b = b_initial), trace = FALSE,
+                        weights = weights)
+  
+  ## Get AIC, RSS and obtained coefficients
+  s_1_weighted <- round(sqrt(deviance(nonlinear_model_1_weighted)/df.residual(nonlinear_model_1_weighted)),4)
+  AIC_1_weighted <- round(AIC(nonlinear_model_1_weighted),4)
+  b_1_weighted <- round(coef(nonlinear_model_1_weighted)["b"],4)
+  
+  #plot_model1(data,b_1_weighted)
+  
+  return(list("model"= nonlinear_model_1_weighted,
+              "s diff"= (s_1_weighted - s_1)/s_1,
+              "AIC diff"= (AIC_1_weighted - AIC_1)/AIC_1,
+              "b diff"= (b_1_weighted - b_1)/b_1,
+              "n_influential"= length(which(dfbetas >threshold))))
+
+}
+
+# plot model with CI
+plot_with_CI <- function(data, nls_model, conf_level) {
+  
+  plotFit(nls_model, interval = "confidence", level = conf_level, mean_data, adjust= 'none',
+        shade = TRUE, col.conf = "pink", col.fit = "red")
+  lines(data$vertices,4-6/data$vertices, col = "blue")
+  lines(data$vertices,data$vertices-1, col = "blue")
+
+}
+```
+
+
+# preliminary plot
+
+With a line at 3 sd from the mean to identify outliers.
+
+```{r}
+data <- find_outliers("Czech",remove=TRUE)
+```
+We remove them and plot the data again. 
+
+```{r}
+plot(data$vertices, data$degree_2nd_moment, xlab = "vertices", ylab = "degree 2nd moment")
+```
+
+
+We suspect heteroskedasticity.
+Thus, we aggregate the data grouping on the number of vertices.
+This works very well for short sentences, but as we can see from the boxplot sentences longer than 50 words circa are more rare, meaning that the smoothing effect of avaraging will not be in place, and aggregation will not lead to an accurate approximation of the k second moment. 
+
+```{r}
+mean_data <- aggregate(data, list(data$vertices), mean)
+
+par(mfrow=c(1,2))
+plot(mean_data$vertices, mean_data$degree_2nd_moment, xlab = "vertices", ylab = "degree 2nd moment")
+abline(v=50, col= 'red')
+boxplot(data$vertices)
+abline(h=50, col= 'red')
+```
+
+Run the first model
+
+```{r}
+# MODEL 1
+
+## Obtain initial parameters with linear regression
+linear_model_1 = lm(log(degree_2nd_moment)~log(vertices), mean_data)
+b_initial = coef(linear_model_1)[2]
+
+## Perform nonlinear regression
+nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b, data = mean_data,
+                      start = list(b = b_initial), trace = FALSE)
+
+## Get AIC, RSS and obtained coefficients
+s_1 <- round(sqrt(deviance(nonlinear_model_1)/df.residual(nonlinear_model_1)),4)
+AIC_1 <- round(AIC(nonlinear_model_1),4)
+b_1 <- round(coef(nonlinear_model_1)["b"],4)
+
+plot_with_CI(mean_data,nonlinear_model_1,0.95)
+
+```
+
+We could try to downweigth the observations corresponding to sentences longer than 50 words, since they have a strong influennce on the model, but they are not as representative as the first ones. 
+We can see a plot of the DFBETAS computed with the Jackknife procedure, confirming the previous statement.
+
+```{r}
+require(nlstools)
+jack_1 <- nlsJack(nonlinear_model_1)
+dfbetas <- jack_1$dfb
+threshold <- 2/sqrt(nrow(mean_data))
+
+plot(mean_data$vertices, dfbetas, xlab = "vertices", ylab = "jack DFBETAS")
+abline(h=threshold)
+```
+
+We run again nls specifying a vector of weights
+
+```{r}
+# weights based on DFBETAS
+weighted <- weighted_model_1(mean_data,0)
+weighted_model <- weighted$model
+
+plot_with_CI(mean_data,weighted_model,0.95)
+```
+
+```{r}
+
+
+
+
+```
+
+
+

@@ -46,27 +46,14 @@ for (l in 1:length(languages)) {
 
 
 ```{r}
-Catalan = read.table("./data/Catalan_dependency_tree_metrics.txt", header = FALSE)
+Catalan = read.table("./data/Basque_dependency_tree_metrics.txt", header = FALSE)
 colnames(Catalan) = c("vertices","degree_2nd_moment", "mean_length")
 Catalan = Catalan[order(Catalan$vertices),]
-
-```
-
-
-
-```{r}
-mean_Catalan = aggregate(Catalan, list(Catalan$vertices), mean)
-par(mfrow=c(1,2))
-
-plot(mean_Catalan$vertices, mean_Catalan$degree_2nd_moment,
-       xlab = "vertices", ylab = "mean mean degree_2nd_moment")
-plot(log(mean_Catalan$vertices), log(mean_Catalan$degree_2nd_moment),
-       xlab = "log(vertices)", ylab = "log(mean mean degree_2nd_moment)")
-
 ```
 
 
 ### attempt initial scaling
+
 ```{r}
 plot(Catalan$vertices, Catalan$degree_2nd_moment,
      xlab = "vertices", ylab = "degree 2nd moment")
@@ -77,6 +64,15 @@ lines(Catalan$vertices,4-6/Catalan$vertices, col = "blue")
 lines(Catalan$vertices,Catalan$vertices-1, col = "blue")
 ```
 
+```{r}
+plot(Catalan$vertices, Catalan$degree_2nd_moment,
+     xlab = "vertices", ylab = "degree 2nd moment")
+plot(mean_Catalan$vertices, mean_Catalan$degree_2nd_moment,
+     xlab = "mean vertices", ylab = "mean degree 2nd moment")
+
+```
+
+
 
 ###################################################
 
@@ -85,7 +81,6 @@ lines(Catalan$vertices,Catalan$vertices-1, col = "blue")
 ## MODEL 1
 
 ```{r}
-#a_initial = 4
 b_initial = 4
 start1 <- Sys.time()
 nonlinear_model = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_initial))
@@ -101,9 +96,9 @@ end1-start1
 linear_model = lm(log(degree_2nd_moment)~log(vertices), Catalan)
 a_linreg = exp(coef(linear_model)[1])
 b_linreg = coef(linear_model)[2]
+
 paste('a_linreg:',a_linreg,'b_linreg:',b_linreg, sep = ' ')
 
-#b_initial = coef(linear_model)[1]
 start1 <- Sys.time()
 nonlinear_model = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
 end1 <- Sys.time()
@@ -112,18 +107,39 @@ end1-start1
 ```
 
 ```{r}
-#plot(linear_model)
-```
-
-
-```{r}
-plot(nonlinear_model)
+plot(linear_model)
 ```
 
 Heteroskedasticity and non normally distributed residuals!
 
-## Not assuming homoskedasticity 
+Let's take the average k_2nd_moment for each sentence length, so we take care of possible outliers, and partly solve the heteroskedasticity issue. However, longer sentences still show high variability, so we will compute confidence intervals for the coefficients through Eickert-White procedure
 
+## mean and outliers
+
+```{r}
+mean_Catalan = aggregate(Catalan, list(Catalan$vertices), mean)
+sd <- sd(mean_Catalan$degree_2nd_moment)
+mean <- mean(mean_Catalan$degree_2nd_moment)
+
+par(mfrow=c(1,2))
+
+plot(Catalan$vertices, Catalan$degree_2nd_moment,
+       xlab = "vertices", ylab = "mean mean degree_2nd_moment")
+
+plot(mean_Catalan$vertices, mean_Catalan$degree_2nd_moment,
+       xlab = "vertices", ylab = "mean mean degree_2nd_moment")
+abline(h=mean+3*sd)
+text(mean_Catalan$vertices, mean_Catalan$degree_2nd_moment,labels=rownames(mean_Catalan),cex=0.9, font=2)
+
+#mean_Catalan <- mean_Catalan %>% mutate(outlier = case_when(
+#  degree_2nd_moment > mean+3*sd ~ "out",
+#  TRUE ~ "in" )) %>% filter(outlier == "in") %>% select(-outlier)
+
+```
+
+ 
+ 
+### Not assuming homoskedasticity 
 
 Source: https://www.r-bloggers.com/2015/06/heteroscedasticity-in-regression-it-matters/
 Code: https://github.com/matloff/misc/blob/master/NlsHC.R
@@ -151,17 +167,17 @@ nlsvcovhc <- function(nlslmout) {
 
 "vcov() inputs the result of a call to lm() or nls(), and outputs the estimated covariance matrix of your estimated parameter vector. Thus the standard errors of the estimated parameters are the square roots of the diagonal elements of the matrix returned by vcov()."
 
+Fit the model with nlsLM: https://www.rdocumentation.org/packages/minpack.lm/versions/1.2-1/topics/nlsLM
+
 
 ```{r}
-# chech the vcov matrix with standard nls()
+# check the vcov matrix with standard nls()
 nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
 print(vcov(nonlinear_model_1))
 
-# chech the vcov matrix with standard nls()
-nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
+# check the vcov matrix with standard nls()
+nonlinear_model_1 = nlsLM(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
 print(nlsvcovhc(nonlinear_model_1))
-
-
 ```
 
 
@@ -181,27 +197,22 @@ end1-start1
 
 
 ```{r}
-plot(nonlinear_model)
-```
+# check the vcov matrix with standard nls()
+print(diag(sqrt(vcov(nonlinear_model))))
 
-### BOX COX transformation
+# check the estimated standard deviations with nlsLM() and Eickert-White CI
+nonlinear_model = nlsLM(degree_2nd_moment~a*(vertices)^b,data=Catalan,start = list(a = a_linreg, b = b_linreg))
+print(diag(sqrt(nlsvcovhc(nonlinear_model))))
+```
 
 ```{r}
-k2m_BCOX <- caret::BoxCoxTrans(Catalan$degree_2nd_moment)
-#print(k2m_BCOX)
-Catalan <- cbind(Catalan, k2m_new=predict(k2m_BCOX, Catalan$degree_2nd_moment)) # append the transformed variable to cars
-par(mfrow=c(1,2))
-hist(Catalan$k2m_new)
-hist(Catalan$degree_2nd_moment)
+# check the vcov matrix with standard nls()
+print(diag(sqrt(vcov(nonlinear_model))))
+
+# check the estimated standard deviations with nlsLM() and Eickert-White CI
+nonlinear_model = nlsLM(degree_2nd_moment~a*(vertices)^b,data=Catalan,start = list(a = a_linreg, b = b_linreg))
+print(diag(sqrt(nlsvcovhc(nonlinear_model))))
 ```
-
-
-```{r}
-model_2_BCIX = nls(k2m_new~a*(vertices)^b, data=Catalan, start = list(a = a_linreg, b = b_linreg))
-plot(model_2_BCIX)
-```
-
-No difference, go for aggregation
 
 
 
@@ -210,7 +221,7 @@ No difference, go for aggregation
 # AGGREGATED DATA
 
 ```{r}
-grouped_Catalan <- Catalan %>% group_by(vertices) %>% dplyr::summarize(Mean_k2m = mean(degree_2nd_moment, na.rm=TRUE))
+#grouped_Catalan <- Catalan %>% group_by(vertices) %>% dplyr::summarize(Mean_k2m = mean(degree_2nd_moment, na.rm=TRUE))
 ```
 
 
@@ -227,6 +238,7 @@ AIC <- n*log(2*pi) + n*log(RSS/n) + n + 2*(p + 1)
 paste("s:",s,"- AIC:", AIC)
 
 # plot
+
 plot(grouped_Catalan$vertices, grouped_Catalan$Mean_k2m,
     xlab = "vertices", ylab = "degree 2nd moment")
 #lines(grouped_Catalan$vertices,grouped_Catalan$Mean_k2m, col = "green")
@@ -235,6 +247,7 @@ lines(grouped_Catalan$vertices,
 lines(grouped_Catalan$vertices,4-6/grouped_Catalan$vertices, col = "blue")
 lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
 
+
 ```
 
 
@@ -242,12 +255,12 @@ lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
 ## Model 1
 
 ```{r}
-linear_model = lm(log(Mean_k2m)~log(vertices), grouped_Catalan)
+linear_model = lm(log(degree_2nd_moment)~log(vertices), mean_Catalan)
 a_linreg = exp(coef(linear_model)[1])
 b_linreg = coef(linear_model)[2]
 
 # reg
-nonlinear_model = nls(Mean_k2m~(vertices/2)^b, data= grouped_Catalan, start = list(b = b_linreg))
+nonlinear_model = nls(degree_2nd_moment~(vertices/2)^b, data= mean_Catalan, start = list(b = b_linreg))
 b_opt = coef(nonlinear_model)["b"]
 
 # scores
@@ -255,16 +268,29 @@ AIC <- AIC(nonlinear_model)
 s <- sqrt(deviance(nonlinear_model)/df.residual(nonlinear_model))
 paste("s:",s,"- AIC:", AIC)
 
-plot(grouped_Catalan$vertices, grouped_Catalan$Mean_k2m,
+# proper confidence intervals 
+sd_b <- diag(sqrt(nlsvcovhc(nonlinear_model)))[1]
+# CI/2 = z* σ/√n, where alfa=0.05 and Z(1-alfa/2) = 1.96 
+N <- nrow(mean_Catalan)
+half_CI <- 1.96*(sd_b/sqrt(N))
+
+plot(grouped_Catalan$vertices, mean_Catalan$degree_2nd_moment,
     xlab = "vertices", ylab = "degree 2nd moment")
-lines(grouped_Catalan$vertices, (grouped_Catalan$vertices/2)^b_opt , col = "red")
-lines(grouped_Catalan$vertices,4-6/grouped_Catalan$vertices, col = "blue")
-lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
+lines(mean_Catalan$vertices, (mean_Catalan$vertices/2)^b_opt , col = "red")
+lines(mean_Catalan$vertices,4-6/mean_Catalan$vertices, col = "blue")
+lines(mean_Catalan$vertices,mean_Catalan$vertices-1, col = "blue")
 ```
+
+
+
 
 # Model 1+
 
 ```{r}
+linear_model = lm(log(degree_2nd_moment)~log(vertices), mean_Catalan)
+a_linreg = exp(coef(linear_model)[1])
+b_linreg = coef(linear_model)[2]
+
 d_initial <- 7
 model_1plus = nls(Mean_k2m~(vertices/2)^b + d, data= grouped_Catalan, start = list(b = b_linreg, d = d_initial))
 b_opt <- coef(model_1plus)["b"]
@@ -291,6 +317,10 @@ lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
 Same regression as before
 
 ```{r}
+linear_model = lm(log(degree_2nd_moment)~log(vertices), mean_Catalan)
+a_linreg = exp(coef(linear_model)[1])
+b_linreg = coef(linear_model)[2]
+
 #f(n) = an^b
 nonlinear_model = nls(Mean_k2m~a*(vertices)^b, data=grouped_Catalan, start = list(a = a_linreg, b = b_linreg))
 a_opt <- coef(nonlinear_model)["a"]
@@ -314,27 +344,55 @@ lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
 # Model 2+
 
 ```{r}
-#f(n) = an^b + d
-d_initial = 2
-nonlinear_model = nls(Mean_k2m~a*(vertices)^b + d, data=grouped_Catalan, start = list(a = a_linreg, b = b_linreg, d = d_initial), control = list(printEval = T, maxiter = 100,warnOnly = TRUE))
-a_opt <- coef(nonlinear_model)["a"]
-b_opt <- coef(nonlinear_model)["b"]
-d_opt <- coef(nonlinear_model)["d"]
+Czech = read.table("./data/Czech_dependency_tree_metrics.txt", header = FALSE)
+colnames(Catalan) = c("vertices","degree_2nd_moment", "mean_length")
+Catalan = Catalan[order(Catalan$vertices),]
+```
+
+
+```{r}
+linear_model_2 = lm(log(degree_2nd_moment)~log(vertices), mean_Catalan)
+a_initial = exp(coef(linear_model_2)[1])
+b_initial = coef(linear_model_2)[2]
+
+
+weigths <- ifelse(mean_Catalan$vertices>49,1,0.9)
+
+d_initial <- 0
+model_2plus = nls(degree_2nd_moment~a*(vertices)^b + d, data=mean_Catalan, 
+                  start = list(a = a_initial, b = b_initial, d = d_initial),
+                  control = list(maxiter=1000),
+                  algorithm = 'port',
+                  lower=c(0,0,-20),
+                  upper=c(20,5,20),
+                  weights = )
+
+a_opt <- coef(model_2plus)["a"]
+b_opt <- coef(model_2plus)["b"]
+d_opt <- coef(model_2plus)["d"]
 paste("a_opt:",a_opt,"- b_opt:", b_opt)
 help(nls)
+
 # scores
 RSS <- deviance(nonlinear_model)
 AIC <- AIC(nonlinear_model)
 s <- sqrt(deviance(nonlinear_model)/df.residual(nonlinear_model))
 paste("s:",s,"- AIC:", AIC)
 
-plot(grouped_Catalan$vertices, grouped_Catalan$Mean_k2m,
+setEPS()
+postscript("catalan_2+.eps")
+plot(mean_Catalan$vertices, mean_Catalan$degree_2nd_moment,
     xlab = "vertices", ylab = "degree 2nd moment")
-lines(grouped_Catalan$vertices, a_opt*(grouped_Catalan$vertices)^b_opt + d_opt , col = "red")
-lines(grouped_Catalan$vertices,4-6/grouped_Catalan$vertices, col = "blue")
-lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
+lines(mean_Catalan$vertices, a_opt*(mean_Catalan$vertices)^b_opt + d_opt , col = "red", ylim = c(0,10))
+#lines(grouped_Catalan$vertices, 20*(grouped_Catalan$vertices)^0.0398 - 17.84 , col = "red", ylim = c(0,10))
+lines(mean_Catalan$vertices,4-6/mean_Catalan$vertices, col = "blue")
+lines(mean_Catalan$vertices,mean_Catalan$vertices-1, col = "blue")
+dev.off()
 ```
 
+```{r}
+#plot(nonlinear_model)
+```
 
 
 
@@ -365,6 +423,106 @@ lines(grouped_Catalan$vertices,4-6/grouped_Catalan$vertices, col = "blue")
 lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
 
 ```
+
+```{r}
+coefficients_df_screen[,2:11] <- sapply(coefficients_df_screen[,2:11], as.numeric)
+plot(coefficients_df_screen)
+```
+
+```{r}
+nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
+print(vcov(nonlinear_model_1))
+
+# check the vcov matrix with standard nls()
+nonlinear_model_1 = nlsLM(degree_2nd_moment~(vertices/2)^b,data=Catalan,start = list(b = b_linreg))
+print(nlsvcovhc(nonlinear_model_1))
+
+```
+
+
+####################################
+
+# PLOTS
+
+```{r}
+
+plot_bestmodel <- function(info) {
+    languages <- c("Arabic", "Basque", "Catalan", "Chinese", "Czech", "English", "Greek", "Hungarian", "Italian", "Turkish")
+    langs_2p <- c("Arabic", "Basque", "Catalan", "English", "Greek", "Hungarian", "Italian")
+    langs_0 <- c("Chinese","Turkish")
+    langs_1p <- c("Czech")
+    
+    for (l in 1:length(languages)) {
+      lang <- languages[l]
+      path <- paste("./data/",paste(lang,"_dependency_tree_metrics.txt",sep = ""),sep = "")
+      raw_data <- read.table(path,header = FALSE,sep = " ",fill = TRUE,quote="", comment.char="") 
+      colnames(raw_data) = c("vertices","degree_2nd_moment", "mean_length")
+      raw_data = raw_data[order(raw_data$vertices),]
+      # check validity
+      valid_data <- raw_data %>% mutate(check = case_when(        
+                                              (degree_2nd_moment >= (4-6)/vertices & degree_2nd_moment <= vertices-1) ~ "valid",
+                                              TRUE ~ "invalid")) %>% filter(check == "valid") %>% select(-check)
+      # aggregate
+      mean_lang = aggregate(valid_data, list(valid_data$vertices), mean)
+      
+      # remove outliers (y value > mean+3*sd)
+      sd <- sd(mean_lang$degree_2nd_moment)
+      mean <- mean(mean_lang$degree_2nd_moment)
+      
+      mean_lang <- mean_lang %>% mutate(outlier = case_when(
+        degree_2nd_moment > mean+3*sd ~ "out",
+        TRUE ~ "in" )) %>% filter(outlier == "in") %>% select(-outlier)
+      
+      if (lang %in% langs_2p) {
+        model <- "2_p"
+        
+        a_opt <- coefficients_df_screen$`2+: a`[coefficients_df_screen$Language == lang]
+        b_opt <- coefficients_df_screen$`2+: b`[coefficients_df_screen$Language == lang]
+        d_opt <- coefficients_df_screen$`2+: d`[coefficients_df_screen$Language == lang]
+        
+        setEPS()
+        postscript(paste(lang,model,".eps",sep='_'))
+        plot(mean_lang$vertices, mean_lang$degree_2nd_moment,
+            xlab = "vertices", ylab = "degree 2nd moment")
+        lines(mean_lang$vertices, a_opt*(mean_lang$vertices)^b_opt + d_opt , col = "red", ylim = c(0,10))
+        lines(mean_lang$vertices,4-6/mean_lang$vertices, col = "blue")
+        lines(mean_lang$vertices,mean_lang$vertices-1, col = "blue")
+        dev.off()
+      }
+      
+        if (lang %in% langs_0) {
+        model <- "0"
+        
+        setEPS()
+        postscript(paste(lang,model,".eps",sep='_'))
+        plot(mean_lang$vertices, mean_lang$degree_2nd_moment, xlab = "vertices", ylab = "degree 2nd moment")
+        lines(mean_lang$vertices,(1 - 1/mean_lang$vertices)*(5 - 6/mean_lang$vertices), col = "red")
+        lines(mean_lang$vertices,4-6/mean_lang$vertices, col = "blue")
+        lines(mean_lang$vertices,mean_lang$vertices-1, col = "blue")
+        dev.off()
+      }
+        
+        else if (lang %in% langs_1p) {
+        model <- "1p"
+        
+        b_opt <- coefficients_df_screen$`1+: b`[coefficients_df_screen$Language == lang]
+        d_opt <- coefficients_df_screen$`1+: d`[coefficients_df_screen$Language == lang]
+        
+        setEPS()
+        postscript(paste(lang,model,info,".eps",sep='_'))
+        plot(mean_lang$vertices, mean_lang$degree_2nd_moment, xlab = "vertices", ylab = "degree 2nd moment")
+        lines(mean_lang$vertices,(mean_lang$vertices/2)^b_opt + d_opt, col = "red")
+        lines(mean_lang$vertices,4-6/mean_lang$vertices, col = "blue")
+        lines(mean_lang$vertices,mean_lang$vertices-1, col = "blue")
+        dev.off()
+      }
+    }
+}
+
+plot_bestmodel("")
+```
+
+
 
 
 
