@@ -57,6 +57,47 @@ langs_summary <- function(languages){
   table_1
 }
 
+preliminary_plots <- function(){
+  # Read file
+  file <- paste("./data/", language, 
+                "_dependency_tree_metrics.txt",
+                sep = "")
+  lang_data = read.table(file, header = FALSE)
+  colnames(lang_data) = c("vertices","degree_2nd_moment", "mean_length")
+  lang_data = lang_data[order(lang_data$vertices), ]
+  
+  
+  plot(lang_data$vertices, lang_data$degree_2nd_moment,
+       xlab = "vertices", ylab = "degree_2nd_moment")
+  
+  plot(log(lang_data$vertices), log(lang_data$mean_length),
+         xlab = "log(vertices)", ylab = "log(degree_2nd_moment)")
+  
+  mean_lang = aggregate(lang_data, list(lang_data$vertices), mean)
+  
+  plot(mean_lang$vertices, mean_lang$degree_2nd_moment,
+       xlab = "vertices", ylab = "mean degree_2nd_moment")
+
+  plot(log(mean_lang$vertices), log(mean_lang$degree_2nd_moment),
+         xlab = "log(vertices)", ylab = "log(mean degree_2nd_moment)")
+  
+  plot(log(lang_data$vertices), log(lang_data$degree_2nd_moment),
+       xlab = "vertices", ylab = "degree_2nd_moment")
+  lines(log(mean_lang$vertices),log(mean_lang$degree_2nd_moment), col = "green")
+  # lines(log(mean_lang$vertices),log((mean_lang$vertices+1)/3), col = "red")
+  # cambiar por formula de k^2
+  
+  
+  plot(lang_data$vertices, lang_data$degree_2nd_moment,
+       xlab = "vertices", ylab = "degree 2nd moment")
+  lines(mean_lang$vertices,mean_lang$degree_2nd_moment, col = "green")
+  lines(lang_data$vertices,
+        (1 - 1/lang_data$vertices)*(5 - 6/lang_data$vertices), col = "red")
+  lines(lang_data$vertices,4-6/lang_data$vertices, col = "blue")
+  lines(lang_data$vertices,lang_data$vertices-1, col = "blue")
+  
+}
+
 ensemble_of_models <- function(language){
   # Read file
   file <- paste("./data/", language, 
@@ -158,25 +199,86 @@ ensemble_of_models <- function(language){
   c_3 <- coef(nonlinear_model_3)["c"]
   
   
+  # MODEL 3+
+  ## Perform nonlinear regression
+  d_initial <- 0
+  nonlinear_model_3p = nls(degree_2nd_moment~a*exp(c*vertices)+d,data=mean_lang,
+                          start = list(a = a_initial, c= c_initial,
+                                       d = d_initial), 
+                          trace = FALSE,
+                          control = list(maxiter=1000),
+                          algorithm = 'port',
+                          lower=c(0,0,-20)
+                          )
+  
+  ## Get AIC, RSS and obtained coefficients
+  s_3p <- sqrt(deviance(nonlinear_model_3p)/df.residual(nonlinear_model_3p))
+  AIC_3p <- AIC(nonlinear_model_3p)
+  a_3p <- coef(nonlinear_model_3p)["a"]
+  c_3p <- coef(nonlinear_model_3p)["c"]
+  d_3p <- coef(nonlinear_model_3p)["d"]
+  
+  
+  # MODEL 4
+  ## Obtain initial parameters with linear regression
+  linear_model_4 = lm(log(degree_2nd_moment)~log(vertices), mean_lang)
+  a_initial = coef(linear_model_3)[1]
+  
+  
+  ## Perform nonlinear regression
+  nonlinear_model_4 = nls(degree_2nd_moment~a*log(vertices),
+                          data=mean_lang,
+                          start = list(a = a_initial), 
+                          trace = FALSE)
+  
+  ## Get AIC, RSS and obtained coefficients
+  s_4 <- sqrt(deviance(nonlinear_model_4)/df.residual(nonlinear_model_4))
+  AIC_4 <- AIC(nonlinear_model_4)
+  a_4 <- coef(nonlinear_model_4)["a"]
+  
+  
+  # MODEL 4+
+  d_initial <- 0
+  ## Perform nonlinear regression
+  nonlinear_model_4p = nls(degree_2nd_moment~a*log(vertices) + d,
+                          data=mean_lang,
+                          start = list(a = a_initial, d=d_initial), 
+                          trace = FALSE)
+  
+  ## Get AIC, RSS and obtained coefficients
+  s_4p <- sqrt(deviance(nonlinear_model_4p)/df.residual(nonlinear_model_4p))
+  AIC_4p <- AIC(nonlinear_model_4p)
+  a_4p <- coef(nonlinear_model_4p)["a"]
+  d_4p <- coef(nonlinear_model_4p)["d"]
+  
   # Build final results vectors
   coefs <- c(language, 
               b_1,
               a_2, b_2,
               a_3, c_3,
+              a_4,
               b_1p, d_1p,
-              a_2p, b_2p, d_2p)
-  aics <- c(language, AIC_0, AIC_1, AIC_2, AIC_3, AIC_1p, AIC_2p)
+              a_2p, b_2p, d_2p,
+              a_3p, c_3p, d_3p,
+              a_4p, d_4p)
+  aics <- c(language, AIC_0, AIC_1, AIC_2, AIC_3, AIC_4, 
+            AIC_1p, AIC_2p, AIC_3p, AIC_4p)
   
-  best_aic <- min(c(AIC_0, AIC_1, AIC_2, AIC_3, AIC_1p, AIC_2p))
+  best_aic <- min(c(AIC_0, AIC_1, AIC_2, AIC_3, AIC_4, 
+                    AIC_1p, AIC_2p, AIC_3p, AIC_4p))
   
   aics_diff <- c(language, abs(AIC_0-best_aic),
                  abs(AIC_1-best_aic),
                  abs(AIC_2-best_aic), 
                  abs(AIC_3-best_aic),
+                 abs(AIC_4-best_aic),
                  abs(AIC_1p-best_aic),
-                 abs(AIC_2p-best_aic))
+                 abs(AIC_2p-best_aic),
+                 abs(AIC_3p-best_aic),
+                 abs(AIC_4p-best_aic))
   
-  std_error <- c(language, s_0, s_1, s_2, s_3, s_1p, s_2p)
+  std_error <- c(language, s_0, s_1, s_2, s_3, s_4,
+                 s_1p, s_2p, s_3p, s_4p)
   
   return(list("coefficients" = coefs ,"aics"=aics ,"aics_diff" = aics_diff, 
               "std_error" = std_error))
@@ -186,25 +288,26 @@ ensemble_of_models <- function(language){
 languages <- c("Arabic", "Basque", "Catalan", "Chinese", "Czech", "English", "Greek", "Hungarian", "Italian", "Turkish")
 
 # Initialize dataframes
-coefficients_df <- data.frame(matrix(ncol = 11, nrow = 0))
+coefficients_df <- data.frame(matrix(ncol = 17, nrow = 0))
 coefficients_df_names <- c('Language', '1: b', '2: a', '2: b', '3: a',
-                     '3: c', '1+: b', '1+: d', '2+: a',
-                     '2+: b', '2+: d')
+                     '3: c', '4: a', '1+: b', '1+: d', '2+: a',
+                     '2+: b', '2+: d', '3+: a', '3+: c', '3+: d',
+                     '4+: a', '4+: d')
 colnames(coefficients_df) <- coefficients_df_names
 
-residual_err_df <- data.frame(matrix(ncol = 7, nrow = 0))
-residual_err_df_names <- c('Language', '0', '1', '2', '3', '1+',
-                           '2+')
+residual_err_df <- data.frame(matrix(ncol = 10, nrow = 0))
+residual_err_df_names <- c('Language', '0', '1', '2', '3', '4', '1+',
+                           '2+', '3+', '4+')
 colnames(residual_err_df) <- residual_err_df_names
 
-aic_df <- data.frame(matrix(ncol = 7, nrow = 0))
-aic_df_names <- c('Language', '0', '1', '2', '3', '1+',
-                           '2+')
+aic_df <- data.frame(matrix(ncol = 10, nrow = 0))
+aic_df_names <- c('Language', '0', '1', '2', '3', '4', '1+',
+                           '2+', '3+', '4+')
 colnames(aic_df) <- aic_df_names
 
-aic_diff_df <- data.frame(matrix(ncol = 7, nrow = 0))
-aic_diff_df_names <- c('Language', '0', '1', '2', '3', '1+',
-                  '2+')
+aic_diff_df <- data.frame(matrix(ncol = 10, nrow = 0))
+aic_diff_df_names <- c('Language', '0', '1', '2', '3', '4', '1+',
+                  '2+', '3+', '4+')
 colnames(aic_diff_df) <- aic_diff_df_names
 
 # Show summary
@@ -242,3 +345,4 @@ residual_err_df
 aic_df
 
 aic_diff_df
+
