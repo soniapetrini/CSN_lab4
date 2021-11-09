@@ -310,6 +310,8 @@ plot(grouped_Catalan$vertices, grouped_Catalan$Mean_k2m,
 lines(grouped_Catalan$vertices, a_opt*(grouped_Catalan$vertices)^b_opt , col = "red")
 lines(grouped_Catalan$vertices,4-6/grouped_Catalan$vertices, col = "blue")
 lines(grouped_Catalan$vertices,grouped_Catalan$vertices-1, col = "blue")
+
+plot(nonlinear_model)
 ```
 
 
