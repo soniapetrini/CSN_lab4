@@ -227,7 +227,7 @@ ensemble_of_models <- function(language){
   # MODEL 4
   ## Obtain initial parameters with linear regression
   linear_model_4 = lm(log(degree_2nd_moment)~log(vertices), mean_lang)
-  a_initial = coef(linear_model_3)[1]
+  a_initial = coef(linear_model_4)[1]
   
   
   ## Perform nonlinear regression
