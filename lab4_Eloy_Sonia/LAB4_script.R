@@ -111,7 +111,7 @@ ensemble_of_models <- function(language){
   
   # find and remove outliers
   lang_data <- find_outliers(lang_data,language,remove=TRUE, plot=FALSE)
-  
+
   # Obtain mean of lang
   mean_lang = aggregate(lang_data, list(lang_data$vertices), mean)
   
