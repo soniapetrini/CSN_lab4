@@ -128,11 +128,11 @@ Run the first model
 # MODEL 1
 
 ## Obtain initial parameters with linear regression
-linear_model_1 = lm(log(degree_2nd_moment)~log(vertices), data)
+linear_model_1 = lm(log(degree_2nd_moment)~log(vertices), mean_data)
 b_initial = coef(linear_model_1)[2]
 
 ## Perform nonlinear regression
-nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b, data = data,
+nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b, data = mean_data,
                       start = list(b = b_initial), trace = FALSE)
 
 ## Get AIC, RSS and obtained coefficients
@@ -140,7 +140,35 @@ s_1 <- round(sqrt(deviance(nonlinear_model_1)/df.residual(nonlinear_model_1)),4)
 AIC_1 <- round(AIC(nonlinear_model_1),4)
 b_1 <- round(coef(nonlinear_model_1)["b"],4)
 
-plot_with_CI(data,nonlinear_model_1,0.95)
+plot_with_CI(mean_data,nonlinear_model_1,0.95)
+
+```
+
+
+### correlation residual-fitted
+
+```{r}
+
+corrs_agg <- c()
+for (i in 1:length(languages)) {
+  lang <- languages[i]
+  data_raw <- read_language(lang)
+  data <- find_outliers(data_raw, remove=T)
+  data <- aggregate(data, list(data$vertices), mean)
+  
+  ## Obtain initial parameters with linear regression
+  linear_model_1 = lm(log(degree_2nd_moment)~log(vertices), data)
+  b_initial = coef(linear_model_1)[2]
+  
+  ## Perform nonlinear regression
+  nonlinear_model_1 = nls(degree_2nd_moment~(vertices/2)^b, data = data,
+                        start = list(b = b_initial), trace = FALSE)
+  residuals <- nlsResiduals(nonlinear_model_1)
+  res <- data.frame(residuals$resi1)
+  corrs_agg[i] <- cor(res$Fitted.values,res$Residuals)
+}
+
+corrs_agg
 
 ```
 
@@ -155,8 +183,11 @@ jack_1 <- nlsJack(nonlinear_model_1)
 dfbetas <- jack_1$dfb
 threshold <- 2/sqrt(nrow(mean_data))
 
-plot(mean_data$vertices, dfbetas, xlab = "vertices", ylab = "jack DFBETAS")
-abline(h=threshold)
+setEPS()
+postscript(paste("dfbetas.eps",sep='_'),width = 7, height = 3.5)
+plot(mean_data$vertices, dfbetas, xlab = "vertices", ylab = "jackknife DFBETAS")
+abline(h=threshold, col= 'blue')
+dev.off()
 ```
 
 

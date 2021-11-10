@@ -25,6 +25,8 @@
 
 # Final script
 
+source("funs.R")
+
 langs_summary <- function(languages){
   table_1 <- data.frame(language=languages,
                         N = numeric(length(languages)),
@@ -106,6 +108,9 @@ ensemble_of_models <- function(language){
   lang_data = read.table(file, header = FALSE)
   colnames(lang_data) = c("vertices","degree_2nd_moment", "mean_length")
   lang_data = lang_data[order(lang_data$vertices), ]
+  
+  # find and remove outliers
+  #lang_data <- find_outliers(lang_data,remove=TRUE)
   
   # Obtain mean of lang
   mean_lang = aggregate(lang_data, list(lang_data$vertices), mean)
@@ -253,32 +258,32 @@ ensemble_of_models <- function(language){
   
   # Build final results vectors
   coefs <- c(language, 
-              b_1,
-              a_2, b_2,
-              a_3, c_3,
-              a_4,
-              b_1p, d_1p,
-              a_2p, b_2p, d_2p,
-              a_3p, c_3p, d_3p,
-              a_4p, d_4p)
-  aics <- c(language, AIC_0, AIC_1, AIC_2, AIC_3, AIC_4, 
-            AIC_1p, AIC_2p, AIC_3p, AIC_4p)
+              round(b_1,3),
+              round(a_2,3), round(b_2,3),
+              round(a_3,3), round(c_3,3),
+              round(a_4,3),
+              round(b_1p,3), round(d_1p,3),
+              round(a_2p,3), round(b_2p,3), round(d_2p,3),
+              round(a_3p,3), round(c_3p,3), round(d_3p,3),
+              round(a_4p,3), round(d_4p,3))
+  aics <- c(language, round(AIC_0,3), round(AIC_1,3), round(AIC_2,3), round(AIC_3,3), round(AIC_4,3), 
+            round(AIC_1p,3), round(AIC_2p,3), round(AIC_3p,3), round(AIC_4p,3))
   
   best_aic <- min(c(AIC_0, AIC_1, AIC_2, AIC_3, AIC_4, 
                     AIC_1p, AIC_2p, AIC_3p, AIC_4p))
   
-  aics_diff <- c(language, abs(AIC_0-best_aic),
-                 abs(AIC_1-best_aic),
-                 abs(AIC_2-best_aic), 
-                 abs(AIC_3-best_aic),
-                 abs(AIC_4-best_aic),
-                 abs(AIC_1p-best_aic),
-                 abs(AIC_2p-best_aic),
-                 abs(AIC_3p-best_aic),
-                 abs(AIC_4p-best_aic))
+  aics_diff <- c(language, round(abs(AIC_0-best_aic),3),
+                 round(abs(AIC_1-best_aic),3),
+                 round(abs(AIC_2-best_aic),3), 
+                 round(abs(AIC_3-best_aic),3),
+                 round(abs(AIC_4-best_aic),3),
+                 round(abs(AIC_1p-best_aic),3),
+                 round(abs(AIC_2p-best_aic),3),
+                 round(abs(AIC_3p-best_aic),3),
+                 round(abs(AIC_4p-best_aic),3))
   
-  std_error <- c(language, s_0, s_1, s_2, s_3, s_4,
-                 s_1p, s_2p, s_3p, s_4p)
+  std_error <- c(language, round(s_0,3), round(s_1,3), round(s_2,3), round(s_3,3), round(s_4,3),
+                 round(s_1p,3), round(s_2p,3), round(s_3p,3), round(s_4p,3))
   
   return(list("coefficients" = coefs ,"aics"=aics ,"aics_diff" = aics_diff, 
               "std_error" = std_error))
