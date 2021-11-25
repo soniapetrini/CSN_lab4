@@ -111,7 +111,7 @@ ensemble_of_models <- function(language){
   
   # find and remove outliers
   lang_data <- find_outliers(lang_data,language,remove=TRUE, plot=FALSE)
-  
+
   # Obtain mean of lang
   mean_lang = aggregate(lang_data, list(lang_data$vertices), mean)
   
@@ -351,7 +351,6 @@ aic_df[,-1] <- sapply(aic_df[,-1], as.numeric)
 
 aic_diff_df[,-1] <- sapply(aic_diff_df[,-1], as.numeric)
 
-
 coefficients_df
 
 residual_err_df
@@ -359,3 +358,5 @@ residual_err_df
 aic_df
 
 aic_diff_df
+
+
